@@ -1,0 +1,193 @@
+import os
+import sys
+import pandas as pd
+from pandas import ExcelWriter
+import xlsxwriter
+
+#opening the excel takes a while, so use this page for analysis.
+#open the frames to see how the data can be useful
+
+
+
+#get current working dir
+cwd = os.getcwd()
+#cwd
+
+#os.chdir('/Users/achampagne/Desktop/SecurityAnalysis')   #change it to the file location
+os.chdir('/Users/amand/Desktop/Security Analysis')
+
+#print (os.listdir('.'))  #list files in directory
+
+file = 'Staff_Packages.xlsx'
+xl = pd.ExcelFile(file)
+
+#print(xl.sheet_names)  #print the sheet names
+
+#create dataframes
+df = xl.parse('Staff_Packages')
+df.columns = df.columns.str.strip()  #remove whitespace
+#print(df.head(5))
+
+
+
+#put the frame into excel
+#writer = ExcelWriter('Staff_Packages.xlsx', engine='xlsxwriter')
+#df_Staff_Packages.to_excel(writer, sheet_name='Staff_Packages', index=False)
+#writer.save()
+
+#play around:
+#https://www.dataquest.io/blog/pandas-cheat-sheet/
+#print(df_Staff_Packages['Login Name'].unique)
+
+#print(df.groupby(['Login Name', 'Package']).count())
+
+#print(df(['Package']).count())
+
+#dfATT = (df['Package' == 'ATT' & 'Access Type' == 'W' & 'User or Role' == 'U'] )
+
+#print(dfATT)
+
+#for each Position, how many users fill that role?
+file = 'Staff_Packages.xlsx'
+xl = pd.ExcelFile(file)
+
+#create dataframes
+dfP = xl.parse('Staff_Packages')
+dfP.columns = dfP.columns.str.strip()  #remove whitespace
+print(dfP.head(5))
+
+#print(dfP['Position Description'].value_counts())
+
+#for each user, how many buildings do they have access to?
+names = dfP.groupby(['Base Location Building Name','Login Name', 'Package', 'Access Type'])
+
+print ( names.size() )
+
+df = pd.DataFrame(dfP.groupby(['Base Location Building Name','Login Name', 'Package', 'Access Type']).size(),columns=['Count'])
+df.to_excel('Staff_Counts.xlsx')
+
+#writer = ExcelWriter('Staff_Counts.xlsx', engine='xlsxwriter')
+#names.size().to_excel(writer, sheet_name='sheet1', index=False)
+#writer.save()
+
+
+
+# and this
+import os
+import sys
+import pandas as pd
+from pandas import ExcelWriter
+import xlsxwriter
+
+
+#get current working dir
+cwd = os.getcwd()
+#cwd
+
+#os.chdir('/Users/achampagne/Desktop/SecurityAnalysis')   #change it to the file location
+os.chdir('/Users/amand/Desktop/Security Analysis')
+
+#print (os.listdir('.'))  #list files in directory
+
+file = 'SecurityAnalysisRawData.xlsx'
+xl = pd.ExcelFile(file)
+
+print(xl.sheet_names)  #print the sheet names
+
+#create dataframes
+df_UserData = xl.parse('UserData')
+df_UserData.columns = df_UserData.columns.str.strip()  #remove whitespace
+print(df_UserData.head(5))
+
+#only create frames for what we're working with
+#df_PackageResource = xl.parse('PackageResource')
+#df_Packages = xl.parse('Packages')
+df_UserID_PackageMap = xl.parse('UserID_PackageMap')
+df_BldgAssign_SecFeat = xl.parse('BldgAssign_SecFeat')  #already used below
+#df_User_MainBldgAssign = xl.parse('User_MainBldgAssign')
+#df_SubPackages = xl.parse('SubPackages')
+#print(df_SubPackages.head(5))
+
+#open the Staff Directory
+file = 'DirectoryListing.xlsx'
+xl = pd.ExcelFile(file)
+
+print(xl.sheet_names)  #print the sheet names
+
+#create dataframes
+df_Staff = xl.parse('page')
+#print(df_Staff.head(5))
+
+
+#trim whitespace from ID columns and delete columns we'll never use
+df_Staff['Position Description'] = df_Staff['Position Description'].str.strip()
+
+df_Staff.drop(['First Name', 'Last Name', 'Email Address', 'Hire Date', 'Rate No', 'Primary/Secondary Rate',
+               'Work Phone'], axis=1, inplace=True)
+df_UserData.drop(['Use Menu Cache', 'May Impersonate', 'Local Login Id', 'Valid User ID', 'School Year',
+                  'Change Date Time', 'Change Uid'], axis=1, inplace=True)
+
+#combine the Positions so each user is one row
+PosDesc = df_Staff.groupby('Empl No')['Position Description'].apply('; '.join)
+
+#create a frame from the PosDesc series
+df2 = PosDesc.to_frame().reset_index()
+
+#remove tabs and spacing from the Position so it saves to the csv nicely
+df2['Position Description'] = df2['Position Description'].map(str.strip)
+
+#remove the Postion from df_Staff to avoid confusion
+del df_Staff['Position Description']
+
+# rename the Empl so the merge can work
+df2 = df2.rename(columns={'Empl No': 'Empl Number'})
+
+# join the 2 dataframes
+df_Staff = pd.merge(df_Staff, df2, left_on='Empl No', right_on='Empl Number', how='outer')
+
+#drop Empl Number; it's a duplicate column now
+del df_Staff['Empl Number']
+
+#remove duplicates before saving to csv
+df_Staff = df_Staff.drop_duplicates()
+
+print('this is df_staff:')
+print(df_Staff )
+
+#combine the two User dataframes
+df_Staff = pd.merge(df_Staff, df_UserData, left_on='Empl No', right_on='UserID', how = 'inner')
+print(df_Staff.info())
+
+print(df_Staff.head(5))
+
+#put the frame into excel
+#writer = ExcelWriter('Staff.xlsx', engine='xlsxwriter')
+#df_Staff.to_excel(writer, sheet_name='Staff', index=False)
+#writer.save()
+
+#now assign packages, subpackages, and features to the users in df_Staff
+#df_BldgAssign_SecFeat = xl.parse('BldgAssign_SecFeat')
+
+df_BldgAssign_SecFeat.drop_duplicates() #just in case
+
+#convert the login IDs to upper so they join
+df_Staff['Login Id'].str.upper() # = df_Staff['Login Id'].upper()
+df_BldgAssign_SecFeat['Login Id'].str.upper() # = df_BldgAssign_SecFeat['Login Id'].upper()
+
+#merge staff to the packages
+df_Staff_Packages = pd.merge(df_Staff, df_BldgAssign_SecFeat, left_on='Login Id', right_on='Login Id', how = 'inner')
+
+print(df_Staff_Packages.head(5))
+
+#put the frame into excel
+writer = ExcelWriter('Staff_Packages.xlsx', engine='xlsxwriter')
+df_Staff_Packages.to_excel(writer, sheet_name='Staff_Packages', index=False)
+writer.save()
+
+#play around:
+#https://www.dataquest.io/blog/pandas-cheat-sheet/
+#print(df_Staff_Packages['Login Name'].unique)
+
+print(df_Staff_Packages.groupby(['Login Name', 'Package']).count())
+
+
